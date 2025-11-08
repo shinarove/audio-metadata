@@ -1,0 +1,11 @@
+__pycache__
+
+# Ignore Python virtual env
+venv
+
+# JetBrains idea dir
+.idea
+
+# Ignore any audio files
+*.m4a
+*.mp3
