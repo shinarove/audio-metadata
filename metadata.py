@@ -44,6 +44,29 @@ def parse_filename(filename: str) -> tuple[str, str] | None:
 
 def is_missing(metadata_flags: int, flag_to_check: MetadataFlags) -> bool:
     return (metadata_flags & flag_to_check.value) == MetadataFlags.NONE.value
+    
+def get_track_nr(audio_path: str) -> int | None:
+    ext = cm.get_audio_file_extension(audio_path)
+    
+    match ext:
+        case cm.AudioFileExtension.NOT_SUPPORTED:
+            return None
+        case cm.AudioFileExtension.MP3:
+            try:
+            
+                audio = MP3(audio_path, ID3=ID3)
+                if audio.tags and "TRCK" in audio.tags:
+                    return int(audio.tags["TRCK"].text[0].split("/")[0])
+                else:
+                    # No track tags currently exist
+                    return 1
+            except (TypeError, ValueError):
+                cm.log(cm.LogLevel.ERROR, f"Failed to read track number of {audio_path}")
+                return None
+                
+        case cm.AudioFileExtension.M4A:
+            audio = MP4(audio_path)
+            return audio.tags["trkn"][0][0]
 
 def check_metadata(audio_path: str) -> int:
     """
@@ -166,6 +189,7 @@ def set_basic_metadata(audio_path: str,
             if year:
                 audio.tags.delall("TYER")
                 audio.tags.add(TYER(encoding=3, text=year))
+            audio.save()
 
         case cm.AudioFileExtension.M4A:
             audio = MP4(audio_path)
@@ -175,10 +199,11 @@ def set_basic_metadata(audio_path: str,
             if artist: audio["\xa9ART"] = artist
             if album: audio["\xa9alb"] = album
             if album_artist: audio["aART"] = album_artist
-            if track_nr: audio["trkn"] = track_nr
-            if disc_nr: audio["disk"] = disc_nr
+            if track_nr: audio["trkn"] = [(track_nr, 0)]
+            if disc_nr: audio["disk"] = [(disc_nr, 0)]
             if genre: audio["\xa9gen"] = genre
             if year: audio["\xa9day"] = year
+            audio.save()
 
 def add_metadata(audio_path: str,
                  cover_dir_path: str,
@@ -209,7 +234,7 @@ def add_metadata(audio_path: str,
     if move_to_dir_path and not cm.valid_dir_path(move_to_dir_path):
         return True # Provided move-to path is not valid.
 
-    parsed_info = parse_filename(audio_path)
+    parsed_info = parse_filename(os.path.basename(audio_path))
     if parsed_info is None:
         return True # File does not have the right name format.
 
@@ -224,13 +249,23 @@ def add_metadata(audio_path: str,
         tm_result, album = tm.ask_input_str("Album name", default=default_album)
         if tm_result == tm.TerminalResult.EXIT:
             return False
-        if album != default_album:
-            tm_result, album_artist = tm.ask_input_str("Album artist", default=parsed_info[0])
+    
+    if is_missing(metadata_flags, MetadataFlags.HAS_ALBUM_ARTIST) or album != default_album:
+        tm_result, album_artist = tm.ask_input_str("Album artist", default=parsed_info[0])
+        if tm_result == tm.TerminalResult.EXIT:
+            return False
+        
+        default_track_nr = 1
+        if not is_missing(metadata_flags, MetadataFlags.HAS_TRACK_NUMBER):
+            raw = get_track_nr(audio_path)
+            if raw:
+                default_track_nr = raw
+        if album != default_album or default_track_nr != 1:
+            tm_result, track_nr = tm.ask_input_int("Track number", default=default_track_nr)
             if tm_result == tm.TerminalResult.EXIT:
                 return False
-            tm_result, track_nr = tm.ask_input_int("Track number", default=1)
-            if tm_result == tm.TerminalResult.EXIT:
-                return False
+        else:
+            track_nr = 1
 
     genre = None
     if is_missing(metadata_flags, MetadataFlags.HAS_GENRE):
@@ -255,7 +290,9 @@ def add_metadata(audio_path: str,
     if is_missing(metadata_flags, MetadataFlags.HAS_BPM):
         bpm.add_bpm(audio_path)
 
-    cm.move_file(audio_path, os.path.join(move_to_dir_path, os.path.basename(audio_path)))
+    # Optional move...
+    if move_to_dir_path:
+        cm.move_file(audio_path, os.path.join(move_to_dir_path, os.path.basename(audio_path)))
 
     return True
 
@@ -289,18 +326,19 @@ def add_metadata_all(audio_dir_path: str,
         cm.log(cm.LogLevel.INFO, f"No audio files found in {audio_dir_path}")
         return
 
-    cm.log(cm.LogLevel.INFO, "\nPress Ctr+C to exit.\n")
+    cm.log(cm.LogLevel.INFO, "Press Ctr+C to exit.\n")
 
     for file in files:
         file_path = os.path.join(audio_dir_path, file)
-        cm.log(cm.LogLevel.INFO, f"\nProcessing: {file}")
+        cm.log(cm.LogLevel.INFO, f"Processing: {file}")
 
         do_next = add_metadata(file_path, cover_dir_path, used_dir_path, move_to_dir_path)
         if not do_next:
             return # Exiting the main loop.
 
 if __name__ == "__main__":
-    add_metadata_all(".",
+    add_metadata_all("../../Playlists/Trap",
                      "../covers/downsized",
-                     "../covers/downsized/used",
-                     "../../Playlists")
+                     "../covers/downsized/used"
+                     #,"../../Playlists"
+                     )

@@ -46,9 +46,17 @@ def ask_input_int(prompt: str, default: int=None) -> tuple[TerminalResult, int]:
     except KeyboardInterrupt:
         cm.log(cm.LogLevel.INFO, f"Keyboard interrupt, exiting.")
         return TerminalResult.EXIT, default
-
+        
     try:
-        int_val = int(val)
+        if val.strip() == "":
+            if default:
+                int_val = default
+            else:
+                cm.log(cm.LogLevel.WARN, f"No integer value was provided and no default.")
+                return TerminalResult.FAILED, 0
+        else:
+            int_val = int(val)
+            
     except (ValueError, TypeError):
         cm.log(cm.LogLevel.ERROR, f"Invalid integer provided!")
         return TerminalResult.FAILED, default

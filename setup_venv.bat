@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 @echo off
 
 set VENV_DIR=venv

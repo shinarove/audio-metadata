@@ -62,7 +62,7 @@ def get_audio_file_extension(file_path: str) -> AudioFileExtension:
         case ".m4a":
             return AudioFileExtension.M4A
         case _:
-            log(LogLevel.WARN, f"The type of the audio file: {file_path} is not a supported.")
+            log(LogLevel.WARN, f"File is not supported: {file_path}")
             return AudioFileExtension.NOT_SUPPORTED
 
 
